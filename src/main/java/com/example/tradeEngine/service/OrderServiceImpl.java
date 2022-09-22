@@ -86,7 +86,7 @@ public class OrderServiceImpl implements OrderService {
 					}
 				}
 			
-				Long currentQuantity = orderPojo.getQuantity();
+				Long currentQuantity = (null != currentCacheOrder ? currentCacheOrder.getQuantity() : 0);
 				if(null != currentCacheOrder && currentCacheOrder.getId().equals(orderPojo.getId())) {
 					while (currentQuantity > 0L) {
 						if(null != targetQueue) {
@@ -103,12 +103,12 @@ public class OrderServiceImpl implements OrderService {
 									orderDao.update(targetOrderEntity);
 								}else {
 									// The target order can be partially filled.
-									currentQuantity = 0L;
 									targetOrderPojo.setQuantity(targetOrderPojo.getQuantity() - currentQuantity);
 									targetQueue.add(targetOrderPojo);
 									
 									targetOrderEntity.getMatchOrderId().add(orderPojo.getId());
 									orderDao.update(targetOrderEntity);
+									currentQuantity = 0L;
 								}
 								// Update entity related ID
 								currentOrderEntity.getMatchOrderId().add(targetOrderEntity.getId());
