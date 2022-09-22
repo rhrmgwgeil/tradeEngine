@@ -1,0 +1,212 @@
+{
+	"info": {
+		"_postman_id": "edbf8795-d1e0-4fa3-9146-7cf37ac84062",
+		"name": "Trade Engine",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "21498538"
+	},
+	"item": [
+		{
+			"name": "Get all orders",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{RootPath}}/orders",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get currently sell caches",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{RootPath}}/queues/sells",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"queues",
+						"sells"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get currently buy caches",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{RootPath}}/queues/buys",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"queues",
+						"buys"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get currently task queue",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{RootPath}}/queues/Tasks",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"queues",
+						"Tasks"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create limit order for buying",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"orderType\":\"BUY\",\n    \"priceType\":\"LIMIT\",\n    \"quantity\": 90,\n    \"price\":8.32\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{RootPath}}/orders",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create limit order for selling",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"orderType\":\"SELL\",\n    \"priceType\":\"LIMIT\",\n    \"quantity\": 100,\n    \"price\":8.40\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{RootPath}}/orders",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create market order for buying",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"orderType\":\"BUY\",\n    \"priceType\":\"MARKET\",\n    \"quantity\": 300\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{RootPath}}/orders",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create market order for selling",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"orderType\":\"SELL\",\n    \"priceType\":\"MARKET\",\n    \"quantity\": 500\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{RootPath}}/orders",
+					"host": [
+						"{{RootPath}}"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "RootPath",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	]
+}
