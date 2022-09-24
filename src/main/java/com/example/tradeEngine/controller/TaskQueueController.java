@@ -35,7 +35,7 @@ public class TaskQueueController {
 	
 	@GetMapping(value = "Tasks")
 	public ResponseEntity<List<OrderPojo>> getAllOrders(){
-		List<OrderPojo> resultList = new ArrayList<OrderPojo>(datatDataStorage.MATCH_TASK_QUEUE);
+		List<OrderPojo> resultList = new ArrayList<OrderPojo>(datatDataStorage.PROCESSING_TASK_QUEUE);
 		return ResponseEntity.ok(resultList);
 	}
 }

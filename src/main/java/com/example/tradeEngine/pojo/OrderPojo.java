@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.example.tradeEngine.common.OrderStatus;
 import com.example.tradeEngine.common.OrderType;
@@ -24,7 +25,7 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 	private BigDecimal price;
 	private Long quantity;
 	private OrderStatus orderStatus;
-	private List<UUID> matchOrderId = new ArrayList<UUID>(); 
+	private List<OrderDetailPojo> matchOrderDetailPojo = new ArrayList<OrderDetailPojo>(); 
 	
 	public UUID getId() {
 		return id;
@@ -74,11 +75,11 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 	public void setOrderStatus(OrderStatus orderStatus) {
 		this.orderStatus = orderStatus;
 	}
-	public List<UUID> getMatchOrderId() {
-		return matchOrderId;
+	public List<OrderDetailPojo> getMatchOrderDetailPojo() {
+		return matchOrderDetailPojo;
 	}
-	public void setMatchOrderId(List<UUID> matchOrderId) {
-		this.matchOrderId = matchOrderId;
+	public void setMatchOrderDetailPojo(List<OrderDetailPojo> matchOrderDetailPojo) {
+		this.matchOrderDetailPojo = matchOrderDetailPojo;
 	}
 	public String getPriceKey() {
 		if(null != this.price) {
@@ -94,7 +95,7 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 	}
 	
 	public OrderPojo(UUID id, LocalDateTime createTime, LocalDateTime updateTime, OrderType orderType,
-			PriceType priceType, BigDecimal price, Long quantity, OrderStatus orderStatus, List<UUID> matchOrderId) {
+			PriceType priceType, BigDecimal price, Long quantity, OrderStatus orderStatus, List<OrderDetailPojo> matchOrderDetailPojo) {
 		this.id = id;
 		this.createTime = createTime;
 		this.updateTime = updateTime;
@@ -103,7 +104,7 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 		this.price = price;
 		this.quantity = quantity;
 		this.orderStatus = orderStatus;
-		this.matchOrderId = matchOrderId;
+		this.matchOrderDetailPojo = matchOrderDetailPojo;
 	}
 	
 	@Override
@@ -116,6 +117,9 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 	    try {
 	    	orderPojo = (OrderPojo) super.clone();
 	    } catch (CloneNotSupportedException e) {
+			List<OrderDetailPojo> cloneList = this.getMatchOrderDetailPojo().stream()
+					.map(detail -> (OrderDetailPojo) detail.clone()).collect(Collectors.toList());
+
 	    	orderPojo = new OrderPojo(
 	          this.getId(), 
 	          this.getCreateTime(), 
@@ -125,7 +129,7 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo>{
 	          this.getPrice(),
 	          this.getQuantity(),
 	          this.getOrderStatus(),
-	          this.getMatchOrderId());
+	          cloneList);
 	    }
 		return orderPojo;
 	}

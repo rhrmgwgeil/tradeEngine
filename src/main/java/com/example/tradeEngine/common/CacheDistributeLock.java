@@ -34,10 +34,11 @@ public class CacheDistributeLock {
 	public CacheDistributeLock lock() {
 		Integer reTryTimes = DEFAULT_RETRY_TIMES;
 		do {
-			LocalDateTime expireLocalDateTime = this.distributedLock.putIfAbsent(this.key, LocalDateTime.now().plusSeconds(this.timeoutSecond));
-			if (null == expireLocalDateTime || LocalDateTime.now().isBefore(expireLocalDateTime)) {
+			if(!this.distributedLock.containsKey(this.key) || LocalDateTime.now().isAfter(this.distributedLock.get(this.key))) {
+				this.distributedLock.put(this.key, LocalDateTime.now().plusSeconds(this.timeoutSecond));
 				return this;
 			}
+
 			if (reTryTimes > 0) {
 				try {
 					TimeUnit.MILLISECONDS.sleep(DEFAULT_RETRY_SECOND);

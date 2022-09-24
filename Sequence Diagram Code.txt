@@ -1,0 +1,55 @@
+title Trade Engine Sequence Diagram
+
+participant Meesage Queue
+participant Trade Engine
+participant Cache Service
+
+Meesage Queue->+Trade Engine:Pull processing order task
+Trade Engine->+Trade Engine:Match order
+Trade Engine->+Cache Service:Distributed lock queue
+Cache Service-->-Trade Engine:
+opt Lock successful
+    note over Trade Engine,Cache Service: When task is a buy order then the \ncurrent queue will use buy order queue \nand target queue will use sell order queue. \n\nThe queue will sort by order's create time \nwhen an order is added.
+    Trade Engine->+Cache Service:Get current and target queue
+    Cache Service-->-Trade Engine:
+    alt Task ID in current queue or Task is market order
+        opt Task is market order
+            Trade Engine->Trade Engine:Get max/min target price in limit order
+            opt Target price exist
+                Trade Engine->Trade Engine:Save task order into current queue
+            end
+        end
+        opt Task price exist and first order ID in current queue is same as task ID
+            loop Current order quantity > 0 && Target queue size > 0
+                alt current quantity - target quantity >= 0
+                    Trade Engine-->Meesage Queue:Insert target order into filled queue
+                    Trade Engine->Trade Engine:Update current quantity
+                else current quantity - target quantity < 0
+                    Trade Engine->Trade Engine:Update target quantity
+                end
+                opt Current quantity == 0
+                    Trade Engine-->Meesage Queue:Insert current order into filled queue
+                end
+                opt Traget quantity > 0
+                    Trade Engine->Trade Engine:Add to temp queue
+                end
+            end
+            opt Current quantity > 0 && Current order is limit order
+                Trade Engine->Trade Engine:Return order to current queue
+            end
+            Trade Engine->Trade Engine:Update current and targe queue
+            Trade Engine->+Cache Service:Update current and target queue
+            Cache Service-->-Trade Engine:
+        end
+    else Task ID not in current queue
+        Trade Engine->Trade Engine:Set task status to filled.
+    end
+    Trade Engine->+Cache Service:Unlock queue
+    Cache Service-->-Trade Engine:
+end
+Trade Engine-->-Trade Engine:Return Task
+opt Task status in processing
+    Trade Engine-->-Meesage Queue:Push processing order task
+end
+
+

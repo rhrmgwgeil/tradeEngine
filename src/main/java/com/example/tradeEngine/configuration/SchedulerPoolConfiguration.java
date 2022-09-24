@@ -18,7 +18,7 @@ public class SchedulerPoolConfiguration {
 	
 	@Autowired
 	private ApplicationContext appContext;
-	private Integer maxPoolSize = 4;
+	private Integer maxPoolSize = 3;
 	
 	@Bean("threadPoolTaskScheduler")
 	public ThreadPoolTaskScheduler threadPoolTaskScheduler() {
