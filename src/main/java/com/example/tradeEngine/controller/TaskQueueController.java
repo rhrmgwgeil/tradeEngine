@@ -1,9 +1,9 @@
 package com.example.tradeEngine.controller;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -22,14 +22,14 @@ public class TaskQueueController {
 	private DataStorage datatDataStorage;
 	
 	@GetMapping(value = "sells")
-	public ResponseEntity<HashMap<String, TreeSet<OrderPojo>>> getSellOrders(){
-		HashMap<String, TreeSet<OrderPojo>> resultMap = datatDataStorage.SELL_ORDER_BOOK_CACHE;
+	public ResponseEntity<ConcurrentHashMap<String, TreeSet<OrderPojo>>> getSellOrders(){
+		ConcurrentHashMap<String, TreeSet<OrderPojo>> resultMap = datatDataStorage.SELL_ORDER_BOOK_CACHE;
 		return ResponseEntity.ok(resultMap);
 	}
 	
 	@GetMapping(value = "buys")
-	public ResponseEntity<HashMap<String, TreeSet<OrderPojo>>> getBuyOrders(){
-		HashMap<String, TreeSet<OrderPojo>> resultMap = datatDataStorage.BUY_ORDER_BOOK_CACHE;
+	public ResponseEntity<ConcurrentHashMap<String, TreeSet<OrderPojo>>> getBuyOrders(){
+		ConcurrentHashMap<String, TreeSet<OrderPojo>> resultMap = datatDataStorage.BUY_ORDER_BOOK_CACHE;
 		return ResponseEntity.ok(resultMap);
 	}
 	
