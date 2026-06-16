@@ -242,6 +242,9 @@ public class OrderServiceImpl implements OrderService {
 					}
 				}
 				dataStorage.PROCESSING_TASK_QUEUE.add(orderPojo);
+			} else {
+				LOGGER.warn("Faild to get a lock, KEY : {}", DistributedLockKey.ORDER_BOOK_CACHE.name());
+				throw new RuntimeException("System busy, please try again later");
 			}
 		} finally {
 			if (isLocked) {
