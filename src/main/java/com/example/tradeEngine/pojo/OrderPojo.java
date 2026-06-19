@@ -13,7 +13,9 @@ import java.util.stream.Collectors;
 import com.example.tradeEngine.common.OrderStatus;
 import com.example.tradeEngine.common.OrderType;
 import com.example.tradeEngine.common.PriceType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OrderPojo implements Serializable, Comparable<OrderPojo> {
 
 	private static final long serialVersionUID = -3176473426588020408L;
@@ -100,13 +102,12 @@ public class OrderPojo implements Serializable, Comparable<OrderPojo> {
 		this.matchOrderDetailPojo = matchOrderDetailPojo;
 	}
 
-	public String getPriceKey() {
+	public BigDecimal getPriceKey() {
 		if (null != this.price) {
-			return this.price.setScale(2, RoundingMode.HALF_UP).toString();
+			return this.price.setScale(2, RoundingMode.HALF_UP);
 		} else {
 			return null;
 		}
-
 	}
 
 	public OrderPojo() {

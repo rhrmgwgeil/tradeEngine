@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 public class CacheDistributeLock {
 	private final static Logger LOGGER = LoggerFactory.getLogger(CacheDistributeLock.class);
 	private final static Integer DEFAULT_RETRY_TIMES = 3;
-	private final static Integer DEFAULT_RETRY_SECOND = 200;
+	private final static Integer DEFAULT_RETRY_MILLIS = 500;
 
 	private final ConcurrentHashMap<String, LocalDateTime> distributedLock = new ConcurrentHashMap<>();
 
@@ -45,7 +45,7 @@ public class CacheDistributeLock {
 
 			if (reTryTimes > 0) {
 				try {
-					TimeUnit.MILLISECONDS.sleep(DEFAULT_RETRY_SECOND);
+					TimeUnit.MILLISECONDS.sleep(DEFAULT_RETRY_MILLIS);
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 					break;
