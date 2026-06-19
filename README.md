@@ -43,4 +43,4 @@ The **FILLED_TASK_QUEUE** is used to update the database. When the order is fill
 | Long          | quantity    |Macth quantity             |
 
 ## Engine Logic
-![Trade Engine Sequence Diagram](https://github.com/rhrmgwgeil/tradeEngine/blob/5864775552f385d8780e0f7f680210ade4a0e63e/Trade%20Engine%20Sequence%20Diagram.png?raw=true "Trade Engine Sequence Diagram")
+![Trade Engine Sequence Diagram](https://github.com/rhrmgwgeil/tradeEngine/blob/main/Trade%20Engine%20Sequence%20Diagram.png?raw=true "Trade Engine Sequence Diagram")
