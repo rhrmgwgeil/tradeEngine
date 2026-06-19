@@ -2,10 +2,12 @@ package com.example.tradeEngine.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
-import java.util.TreeSet;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -25,148 +27,144 @@ import com.example.tradeEngine.pojo.OrderPojo;
 @Service
 public class OrderServiceImpl implements OrderService {
 	private static final Logger LOGGER = LoggerFactory.getLogger(OrderServiceImpl.class);
-	
+
 	@Autowired
 	private OrderDao orderDao;
 	@Autowired
 	private DataStorage dataStorage;
 
-	@Override
-	public OrderPojo processMatchEngine(OrderPojo orderPojo) throws Exception{
-		String targetPrice = orderPojo.getPriceKey();
-		
-		CacheDistributeLock orderBookLock = new CacheDistributeLock(dataStorage.DISTRIBUTED_LOCK, DistributedLockKey.ORDER_BOOK_CACHE.name());
+	@Autowired
+	private CacheDistributeLock cacheDistributeLock;
 
+	@Override
+	public OrderPojo processMatchEngine(OrderPojo orderPojo) throws Exception {
+		boolean isLocked = false;
 		try {
-			if(null != orderBookLock.lock()) {
-				boolean orderExistInQueue = false;
-				ConcurrentHashMap<String, TreeSet<OrderPojo>> currentQueue = OrderType.BUY.equals(orderPojo.getOrderType()) ? dataStorage.BUY_ORDER_BOOK_CACHE : dataStorage.SELL_ORDER_BOOK_CACHE; 
-				ConcurrentHashMap<String, TreeSet<OrderPojo>> targetQueue = OrderType.BUY.equals(orderPojo.getOrderType()) ? dataStorage.SELL_ORDER_BOOK_CACHE : dataStorage.BUY_ORDER_BOOK_CACHE; 
-				
-				final UUID orderID = orderPojo.getId();
-				
-				if (null != orderPojo.getPriceKey()) {
-					// Check current task still in processing
-					if(null != currentQueue.get(orderPojo.getPriceKey())) {
-						orderExistInQueue = currentQueue.get(orderPojo.getPriceKey()).stream()
-								.filter(order -> order.getId().equals(orderID)).findFirst().isPresent();
-					}
+			if (cacheDistributeLock.lock(DistributedLockKey.ORDER_BOOK_CACHE.name(), 3)) {
+				isLocked = true;
+
+				ConcurrentSkipListMap<BigDecimal, ConcurrentSkipListSet<OrderPojo>> currentQueue = OrderType.BUY
+						.equals(orderPojo.getOrderType()) ? dataStorage.BUY_ORDER_BOOK_CACHE
+								: dataStorage.SELL_ORDER_BOOK_CACHE;
+				ConcurrentSkipListMap<BigDecimal, ConcurrentSkipListSet<OrderPojo>> targetQueue = OrderType.BUY
+						.equals(orderPojo.getOrderType()) ? dataStorage.SELL_ORDER_BOOK_CACHE
+								: dataStorage.BUY_ORDER_BOOK_CACHE;
+
+				UUID orderID = orderPojo.getId();
+				long[] accumulatedSum = { 0L };
+				long requiredQuantity = orderPojo.getQuantity();
+				List<OrderPojo> matchedList = null;
+
+				if (null != orderPojo.getPriceKey() && PriceType.LIMIT.equals(orderPojo.getPriceType())) {
+					BigDecimal priceKey = orderPojo.getPriceKey();
+					ConcurrentSkipListSet<OrderPojo> targetPriceQueue = targetQueue.get(priceKey);
+
+					// Get match orders by price priority, and time priority.
+					matchedList = Optional.ofNullable(targetPriceQueue)
+							.map(queue -> queue.stream()
+									.takeWhile(order -> {
+										boolean keepGoing = accumulatedSum[0] < requiredQuantity;
+										accumulatedSum[0] += order.getQuantity();
+										return keepGoing;
+									})
+									.collect(Collectors.toList()))
+							.orElse(Collections.emptyList());
 				} else {
-					if (PriceType.MARKET.equals(orderPojo.getPriceType())) {
-						orderExistInQueue = true;
-					}
+					// Get all order in target queue by price priority, and time priority.
+					matchedList = Optional.ofNullable(targetQueue)
+							.map(map -> map.values().stream()
+									.filter(java.util.Objects::nonNull)
+									.flatMap(java.util.Collection::stream).takeWhile(order -> {
+										boolean keepGoing = accumulatedSum[0] < requiredQuantity;
+										accumulatedSum[0] += order.getQuantity();
+										return keepGoing;
+									})
+									.collect(Collectors.toList()))
+							.orElse(java.util.Collections.emptyList());
 				}
-				
-				if(orderExistInQueue) {
-					if(PriceType.MARKET.equals(orderPojo.getPriceType())) {
-						// Get max/sell price
-						targetPrice = getSortPrice(!OrderType.BUY.equals(orderPojo.getOrderType()), targetQueue);
-						
-						if(null != orderPojo.getPriceKey() && orderPojo.getPriceKey() != targetPrice) {
-							// Remove market order from queue when current max/min price is change.
-							currentQueue.get(orderPojo.getPriceKey()).removeIf(order -> order.getId().equals(orderID));
+
+				if (null != matchedList && matchedList.size() > 0) {
+					long remainingQuantity = orderPojo.getQuantity();
+					LocalDateTime currentTime = LocalDateTime.now();
+					for (OrderPojo targetOrderPojo : matchedList) {
+						if (remainingQuantity <= 0) {
+							break;
 						}
-						
-						if(null != targetPrice ) {
-							orderPojo.setPrice(new BigDecimal(targetPrice));
-							if(currentQueue.containsKey(targetPrice)) {
-								currentQueue.get(targetPrice).add(orderPojo);
-							}else {
-								TreeSet<OrderPojo> orderQueue = new TreeSet<OrderPojo>();
-								orderQueue.add(orderPojo);
-								currentQueue.put(targetPrice, orderQueue);
-							}
-						}else {
-							orderPojo.setPrice(null);
-						}
-					}
-					
-					if(null != orderPojo.getPriceKey()) {
-						OrderPojo currentCacheOrder = currentQueue.get(orderPojo.getPriceKey()).first();
-						if(currentCacheOrder.getId() == orderPojo.getId()) {
-							//Remove current order from queue
-							currentCacheOrder = currentQueue.get(orderPojo.getPriceKey()).pollFirst();
-							LOGGER.info(String.format("Start match, Price: %s, Quantity: %d, Price Type: %s, Target type: %s", targetPrice, orderPojo.getQuantity(), orderPojo.getPriceType(), orderPojo.getOrderType()));
-							
-							TreeSet<OrderPojo> targetPriceQueue = targetQueue.get(orderPojo.getPriceKey()); 
-							TreeSet<OrderPojo> tempTargetQueue = new TreeSet<OrderPojo>();
-							
-							boolean hasMatched = false;
-							
-							while (currentCacheOrder.getQuantity() > 0L && null!= targetPriceQueue && targetPriceQueue.size() > 0) {
-								hasMatched = true;
-								OrderPojo targetOrder = targetPriceQueue.pollFirst();
-								LocalDateTime currentTime = LocalDateTime.now();
-								if(currentCacheOrder.getQuantity() - targetOrder.getQuantity() >= 0L) {
-									currentCacheOrder.setQuantity(currentCacheOrder.getQuantity() - targetOrder.getQuantity());
-									currentCacheOrder.setOrderStatus(currentCacheOrder.getQuantity() == 0 ? OrderStatus.FILLED : OrderStatus.PROCESSING);
-									currentCacheOrder.setUpdateTime(currentTime);
-									currentCacheOrder.getMatchOrderDetailPojo().add(new OrderDetailPojo(targetOrder.getId(), currentTime, targetOrder.getPrice(), targetOrder.getQuantity()));
-									
-									targetOrder.setOrderStatus(OrderStatus.FILLED);
-									targetOrder.setUpdateTime(currentTime);
-									targetOrder.getMatchOrderDetailPojo().add(new OrderDetailPojo(currentCacheOrder.getId(), currentTime, currentCacheOrder.getPrice(), targetOrder.getQuantity()));
-									targetOrder.setQuantity(0L);
-									
-									dataStorage.FILLED_TASK_QUEUE.add(targetOrder);
-								}else {
-									targetOrder.setQuantity(targetOrder.getQuantity() - currentCacheOrder.getQuantity());
-									targetOrder.getMatchOrderDetailPojo().add(new OrderDetailPojo(currentCacheOrder.getId(), currentTime, currentCacheOrder.getPrice(), currentCacheOrder.getQuantity()));
-									
-									
-									currentCacheOrder.setOrderStatus(OrderStatus.FILLED);
-									currentCacheOrder.getMatchOrderDetailPojo().add(new OrderDetailPojo(targetOrder.getId(), currentTime, targetOrder.getPrice(), currentCacheOrder.getQuantity()));
-									currentCacheOrder.setQuantity(0L);
-									currentCacheOrder.setUpdateTime(currentTime);
-									
-								}
-								if(OrderStatus.FILLED.equals(currentCacheOrder.getOrderStatus())) {
-									dataStorage.FILLED_TASK_QUEUE.add(currentCacheOrder);
-								}
-								
-								if(OrderStatus.PROCESSING.equals(targetOrder.getOrderStatus())) {
-									tempTargetQueue.add(targetOrder);
+
+						long matchQuantity = Math.min(remainingQuantity, targetOrderPojo.getQuantity());
+						remainingQuantity -= matchQuantity;
+
+						// Current macth detail use Maker's price, and Taker's ID.
+						OrderDetailPojo targetOrderDetailPojo = new OrderDetailPojo();
+						targetOrderDetailPojo.setId(targetOrderPojo.getId());
+						targetOrderDetailPojo.setPrice(targetOrderPojo.getPrice());
+						targetOrderDetailPojo.setQuantity(matchQuantity);
+						targetOrderDetailPojo.setUpdateTime(currentTime);
+						orderPojo.getMatchOrderDetailPojo().add(targetOrderDetailPojo);
+
+						// Match detail record by Taker's ID, and Maker's price.
+						OrderDetailPojo currenDetailPojo = new OrderDetailPojo();
+						currenDetailPojo.setId(orderID);
+						currenDetailPojo.setPrice(targetOrderPojo.getPrice());
+						currenDetailPojo.setQuantity(matchQuantity);
+						currenDetailPojo.setUpdateTime(currentTime);
+						targetOrderPojo.getMatchOrderDetailPojo().add(currenDetailPojo);
+
+						// Update target order's quantity and status
+						long newTargetQty = targetOrderPojo.getQuantity() - matchQuantity;
+						targetOrderPojo.setQuantity(newTargetQty);
+						targetOrderPojo.setOrderStatus(newTargetQty == 0 ? OrderStatus.FILLED : OrderStatus.PROCESSING);
+						targetOrderPojo.setUpdateTime(currentTime);
+
+						update(targetOrderPojo);
+
+						// Target order is filled, remove from cache and add to filled queue.
+						if (newTargetQty <= 0) {
+							BigDecimal targetPriceKey = targetOrderPojo.getPriceKey();
+							ConcurrentSkipListSet<OrderPojo> queueAtPrice = targetQueue.get(targetPriceKey);
+							if (queueAtPrice != null) {
+								queueAtPrice.remove(targetOrderPojo);
+								if (queueAtPrice.isEmpty()) {
+									targetQueue.remove(targetPriceKey);
 								}
 							}
-							
-							if(OrderStatus.PROCESSING.equals(currentCacheOrder.getOrderStatus()) && PriceType.LIMIT.equals(currentCacheOrder.getPriceType())) {
-								currentQueue.get(orderPojo.getPriceKey()).add(currentCacheOrder);
-							}
-							
-							if(hasMatched) {
-								if(null != targetPriceQueue && targetPriceQueue.size() > 0) {
-									tempTargetQueue.addAll(targetPriceQueue);
-								}
-								if(tempTargetQueue.size() > 0) {
-									targetQueue.put(currentCacheOrder.getPriceKey(), tempTargetQueue);
-								}else {
-									targetQueue.remove(currentCacheOrder.getPriceKey());
-								}
-							}else {
-								if(null != targetPriceQueue && targetPriceQueue.size() > 0) {
-									targetQueue.put(currentCacheOrder.getPriceKey(), targetPriceQueue);
-								}else {
-									targetQueue.remove(currentCacheOrder.getPriceKey());
-								}
-							}
-							
-							if(currentQueue.get(currentCacheOrder.getPriceKey()).size() <= 0) {
-								currentQueue.remove(currentCacheOrder.getPriceKey());
-							}
-							
-							dataStorage.BUY_ORDER_BOOK_CACHE = OrderType.BUY.equals(currentCacheOrder.getOrderType()) ? currentQueue : targetQueue;
-							dataStorage.SELL_ORDER_BOOK_CACHE = OrderType.BUY.equals(currentCacheOrder.getOrderType()) ? targetQueue : currentQueue;
-							
-							orderPojo = (OrderPojo)currentCacheOrder.clone();
+							dataStorage.FILLED_TASK_QUEUE.add(targetOrderPojo);
 						}
 					}
-				}else {
-					orderPojo.setOrderStatus(OrderStatus.FILLED);
+
+					// Update current order's quantity and status
+					orderPojo.setQuantity(remainingQuantity);
+					orderPojo.setOrderStatus(remainingQuantity == 0 ? OrderStatus.FILLED : OrderStatus.PROCESSING);
+					orderPojo.setUpdateTime(currentTime);
+
+					// If current order is partially filled and limit order, add to cache
+					if (OrderStatus.PROCESSING.equals(orderPojo.getOrderStatus())
+							&& PriceType.LIMIT.equals(orderPojo.getPriceType())) {
+						BigDecimal priceKey = orderPojo.getPriceKey();
+						if (currentQueue.containsKey(priceKey)) {
+							currentQueue.get(priceKey).add(orderPojo);
+						} else {
+							ConcurrentSkipListSet<OrderPojo> orderQueue = new ConcurrentSkipListSet<>();
+							orderQueue.add(orderPojo);
+							currentQueue.put(priceKey, orderQueue);
+						}
+					}
+
+					// Current order is filled, add to filled queue.
+					if (remainingQuantity == 0) {
+						dataStorage.FILLED_TASK_QUEUE.add(orderPojo);
+					}
+
+					update(orderPojo);
 				}
+			} else {
+				LOGGER.warn("Failed to get a lock during matching, KEY : {}",
+						DistributedLockKey.ORDER_BOOK_CACHE.name());
+				throw new RuntimeException("System busy, matching delayed");
 			}
-		}finally {
-			if(null != orderBookLock) {
-				orderBookLock.unlock();
+		} finally {
+			if (isLocked) {
+				cacheDistributeLock.unlock(DistributedLockKey.ORDER_BOOK_CACHE.name());
 			}
 		}
 		return orderPojo;
@@ -174,69 +172,45 @@ public class OrderServiceImpl implements OrderService {
 
 	@Override
 	public void insert(OrderPojo orderPojo) {
-		orderPojo = orderDao.insert(orderPojo);
-		CacheDistributeLock orderBookLock = new CacheDistributeLock(dataStorage.DISTRIBUTED_LOCK, DistributedLockKey.ORDER_BOOK_CACHE.name());
-		if(null != orderBookLock.lock()) {
-			if(PriceType.MARKET.equals(orderPojo.getPriceType())) {
-				String priceString = null;
-				
-				if(OrderType.BUY.equals(orderPojo.getOrderType())){
-					// Get min sell price
-					priceString = getSortPrice(false, dataStorage.SELL_ORDER_BOOK_CACHE);
-				}else {
-					// Get max buy price
-					priceString = getSortPrice(true, dataStorage.BUY_ORDER_BOOK_CACHE);
-				}
-				
-				if(null != priceString) {
-					orderPojo.setPrice(new BigDecimal(priceString));
-				}
-			}
-			
-			if(null != orderPojo.getPriceKey()) {
-				TreeSet<OrderPojo> orderQueue = null;
-				if(OrderType.BUY.equals(orderPojo.getOrderType())) {
-					orderQueue = dataStorage.BUY_ORDER_BOOK_CACHE.get(orderPojo.getPriceKey());
-				}else {
-					orderQueue = dataStorage.SELL_ORDER_BOOK_CACHE.get(orderPojo.getPriceKey());
-				}
-				
-				if(null == orderQueue) {
-					orderQueue = new TreeSet<OrderPojo>();
-				}
-				orderQueue.add(orderPojo);
-				
-				if(OrderType.BUY.equals(orderPojo.getOrderType())) {
-					dataStorage.BUY_ORDER_BOOK_CACHE.put(orderPojo.getPriceKey(), orderQueue);
-				}else {
-					dataStorage.SELL_ORDER_BOOK_CACHE.put(orderPojo.getPriceKey(), orderQueue);
-				}
-				
-			}
-			
-			orderBookLock.unlock();
-			dataStorage.PROCESSING_TASK_QUEUE.add(orderPojo);
-		}
-		
-	}
 
-	@Override
-	public String getSortPrice(boolean isMax, ConcurrentHashMap<String, TreeSet<OrderPojo>> targetQueue) {
-		List<String> priceKeys = targetQueue.keySet().stream().sorted((key1, key2) -> { 
-			if(isMax) {
-				return new BigDecimal(key2).compareTo(new BigDecimal(key1));
-			}else {
-				return new BigDecimal(key1).compareTo(new BigDecimal(key2));
-			} 
-		}).collect(Collectors.toList());
-		
-		for(String priceKey : priceKeys) {
-			if (targetQueue.get(priceKey).stream().filter(order -> PriceType.LIMIT.equals(order.getPriceType()))
-					.findAny().isPresent()) {
-				return priceKey;
+		boolean isLocked = false;
+		try {
+			if (cacheDistributeLock.lock(DistributedLockKey.ORDER_BOOK_CACHE.name(), 3)) {
+				isLocked = true;
+				orderPojo.setCreateTime(LocalDateTime.now());
+				orderPojo.setUpdateTime(LocalDateTime.now());
+				orderPojo = orderDao.insert(orderPojo);
+
+				if (null != orderPojo.getPriceKey() && PriceType.LIMIT.equals(orderPojo.getPriceType())) {
+					ConcurrentSkipListSet<OrderPojo> orderQueue = null;
+					if (OrderType.BUY.equals(orderPojo.getOrderType())) {
+						orderQueue = dataStorage.BUY_ORDER_BOOK_CACHE.get(orderPojo.getPriceKey());
+					} else {
+						orderQueue = dataStorage.SELL_ORDER_BOOK_CACHE.get(orderPojo.getPriceKey());
+					}
+
+					if (null == orderQueue) {
+						orderQueue = new ConcurrentSkipListSet<OrderPojo>();
+					}
+					orderQueue.add(orderPojo);
+
+					if (OrderType.BUY.equals(orderPojo.getOrderType())) {
+						dataStorage.BUY_ORDER_BOOK_CACHE.put(orderPojo.getPriceKey(), orderQueue);
+					} else {
+						dataStorage.SELL_ORDER_BOOK_CACHE.put(orderPojo.getPriceKey(), orderQueue);
+					}
+				}
+				dataStorage.PROCESSING_TASK_QUEUE.add(orderPojo);
+			} else {
+				LOGGER.warn("Faild to get a lock, KEY : {}", DistributedLockKey.ORDER_BOOK_CACHE.name());
+				throw new RuntimeException("System busy, please try again later");
+			}
+		} finally {
+			if (isLocked) {
+				cacheDistributeLock.unlock(DistributedLockKey.ORDER_BOOK_CACHE.name());
 			}
 		}
-		return null;
+
 	}
 
 	@Override

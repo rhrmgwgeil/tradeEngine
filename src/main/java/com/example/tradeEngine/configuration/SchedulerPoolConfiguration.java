@@ -1,6 +1,7 @@
 package com.example.tradeEngine.configuration;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
+import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
@@ -12,14 +13,14 @@ import com.example.tradeEngine.service.TrandEngineService;
 
 @Component
 public class SchedulerPoolConfiguration {
-	
+
 	@Autowired
 	private ThreadPoolTaskScheduler threadPoolTaskScheduler;
-	
+
 	@Autowired
 	private ApplicationContext appContext;
 	private Integer maxPoolSize = 3;
-	
+
 	@Bean("threadPoolTaskScheduler")
 	public ThreadPoolTaskScheduler threadPoolTaskScheduler() {
 		ThreadPoolTaskScheduler threadPoolTaskScheduler = new ThreadPoolTaskScheduler();
@@ -27,11 +28,15 @@ public class SchedulerPoolConfiguration {
 		threadPoolTaskScheduler.setThreadNamePrefix("ThreadPoolTaskScheduler");
 		return threadPoolTaskScheduler;
 	}
-	
+
+	/**
+	 * Initial multiple thread to process match engine
+	 */
 	@PostConstruct
 	public void init() {
-		for(int i=1 ; i <= maxPoolSize ; i++) {
-			this.threadPoolTaskScheduler.scheduleWithFixedDelay(new TrandEngineService(appContext), 1000 * i);
+		for (int i = 1; i <= maxPoolSize; i++) {
+			this.threadPoolTaskScheduler.scheduleWithFixedDelay(new TrandEngineService(appContext),
+					Duration.ofMillis(1000L * i));
 		}
 	}
 }

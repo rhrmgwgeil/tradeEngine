@@ -1,10 +1,12 @@
 package com.example.tradeEngine.common;
 
-import java.time.LocalDateTime;
-import java.util.TreeSet;
+import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import org.springframework.stereotype.Component;
 
@@ -12,15 +14,18 @@ import com.example.tradeEngine.pojo.OrderPojo;
 
 @Component
 public class DataStorage {
-	// Cache service
-	public ConcurrentHashMap<String, LocalDateTime> DISTRIBUTED_LOCK = new ConcurrentHashMap<String, LocalDateTime>();
-	public ConcurrentHashMap<String, TreeSet<OrderPojo>> SELL_ORDER_BOOK_CACHE = new ConcurrentHashMap<String, TreeSet<OrderPojo>>();
-	public ConcurrentHashMap<String, TreeSet<OrderPojo>> BUY_ORDER_BOOK_CACHE = new ConcurrentHashMap<String, TreeSet<OrderPojo>>();
-	
-	// Message queue
+
+	// Sort by price order by Ascending
+	public ConcurrentSkipListMap<BigDecimal, ConcurrentSkipListSet<OrderPojo>> SELL_ORDER_BOOK_CACHE = new ConcurrentSkipListMap<>();
+	// Sort by price order by Descending
+	public ConcurrentSkipListMap<BigDecimal, ConcurrentSkipListSet<OrderPojo>> BUY_ORDER_BOOK_CACHE = new ConcurrentSkipListMap<>(
+			Comparator.reverseOrder());
+
+	// FIFO Message queue
 	public ConcurrentLinkedQueue<OrderPojo> PROCESSING_TASK_QUEUE = new ConcurrentLinkedQueue<OrderPojo>();
+	// FIFO Message queue
 	public ConcurrentLinkedQueue<OrderPojo> FILLED_TASK_QUEUE = new ConcurrentLinkedQueue<OrderPojo>();
-	
-	// Database
+
+	// Storage for all orders
 	public ConcurrentHashMap<UUID, OrderPojo> ORDER_BOOK_STORAGE = new ConcurrentHashMap<UUID, OrderPojo>();
 }
